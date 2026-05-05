@@ -36,9 +36,14 @@ class DataProfile:
                     f", std={col.stats.get('std', 'N/A'):.3g}"
                     f", range=[{col.stats.get('min', 'N/A'):.3g}, {col.stats.get('max', 'N/A'):.3g}]"
                 )
+            elif col.kind == "binary_indicator":
+                stat_str = f" | flagged={col.stats.get('flagged_count', 0)} rows"
+            elif col.kind == "categorical" and col.stats:
+                top = list(col.stats.get("top_values", {}).keys())[:3]
+                stat_str = f" | top_values={top}"
+
             lines.append(
                 f"  - {col.name} [{col.kind}]"
-                f" | missing={col.missing_pct:.1f}%"
                 f" | unique={col.n_unique}"
                 f"{stat_str}"
                 f" | samples={col.sample_values[:3]}"
@@ -50,11 +55,17 @@ def profile_data(df: pd.DataFrame) -> DataProfile:
     columns = []
     for col_name in df.columns:
         series = df[col_name]
+        # Post-preprocessing: missing values should already be filled
         n_missing = int(series.isna().sum())
         missing_pct = n_missing / len(series) * 100
         n_unique = int(series.nunique())
 
-        if pd.api.types.is_numeric_dtype(series):
+        # Indicator columns added by preprocessor are binary flags, not general numerics
+        if col_name.endswith("__was_missing"):
+            kind = "binary_indicator"
+            stats = {"flagged_count": int(series.sum())}
+
+        elif pd.api.types.is_numeric_dtype(series):
             kind = "numeric"
             stats = {
                 "mean": float(series.mean()),
